@@ -1,0 +1,23 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+# Package.resolved はコミットする（再現可能なビルドのため、Apple公式推奨）
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+._*
+
+# IDE
+*.swp
+*.swo
+*~
+
+# 設定ファイル（API キー等を含む可能性）
+config.json
+.env
