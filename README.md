@@ -68,21 +68,25 @@ Gemini 2.5 Flash-Lite のコスト: **$0.10 / 1M input tokens, $0.40 / 1M output
 ```
 vox/
 ├── Sources/
-│   ├── Vox/
-│   │   ├── main.swift              # エントリポイント・CLI引数解析
-│   │   ├── SpeechRecognizer.swift   # SFSpeechRecognizer ラッパー
-│   │   ├── AudioCapture.swift       # AVAudioEngine マイク入力
-│   │   ├── Rewriter.swift           # LLM リライト処理（バックエンド抽象化）
+│   ├── VoxLib/                          # ライブラリターゲット（ロジック全体）
+│   │   ├── SpeechRecognizer.swift       # SFSpeechRecognizer ラッパー
+│   │   ├── AudioCapture.swift           # AVAudioEngine マイク入力
+│   │   ├── Rewriter.swift               # LLM リライト処理（バックエンド抽象化）
 │   │   ├── RewriterBackend/
-│   │   │   ├── GeminiBackend.swift  # Gemini Flash-Lite
-│   │   │   ├── ClaudeBackend.swift  # Claude API (Haiku)
-│   │   │   ├── OllamaBackend.swift  # ローカル LLM
-│   │   │   └── NoopBackend.swift    # リライトなし（パススルー）
-│   │   ├── ClipboardManager.swift   # pbcopy 連携
-│   │   └── Config.swift             # 設定管理
-├── Package.swift                    # Swift Package Manager
-├── config.example.json              # 設定ファイルテンプレート
-├── install.sh                       # インストールスクリプト
+│   │   │   ├── GeminiBackend.swift      # Gemini Flash-Lite
+│   │   │   ├── ClaudeBackend.swift      # Claude API (Haiku)
+│   │   │   ├── OllamaBackend.swift      # ローカル LLM
+│   │   │   └── NoopBackend.swift        # リライトなし（パススルー）
+│   │   ├── ClipboardManager.swift       # pbcopy 連携
+│   │   └── Config.swift                 # 設定管理
+│   └── Vox/
+│       └── Vox.swift                    # CLIエントリポイント（VoxLib に依存）
+├── Tests/
+│   └── VoxLibTests/                     # ユニットテスト
+├── Package.swift                        # Swift Package Manager
+├── Info.plist                           # マイク・音声認識の権限記述
+├── config.example.json                  # 設定ファイルテンプレート
+├── install.sh                           # インストールスクリプト
 └── README.md
 ```
 

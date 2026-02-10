@@ -1,0 +1,35 @@
+{
+  "language": "ja-JP",
+  "on_device_only": true,
+  "rewriter": {
+    "backend": "gemini",
+    "gemini": {
+      "api_key_env": "GEMINI_API_KEY",
+      "model": "gemini-2.5-flash-lite",
+      "endpoint": "https://generativelanguage.googleapis.com/v1beta"
+    },
+    "claude": {
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "model": "claude-haiku-4-5-20251001"
+    },
+    "ollama": {
+      "endpoint": "http://localhost:11434",
+      "model": "llama3.2"
+    },
+    "system_prompt_path": "~/.config/vox/rewrite_prompt.txt",
+    "max_tokens": 2048
+  },
+  "output": {
+    "clipboard": true,
+    "stdout": false,
+    "file": null
+  },
+  "recognition": {
+    "partial_results": true,
+    "duration_limit": 60,
+    "silence_timeout": 3.0
+  },
+  "vocabulary": {
+    "custom_terms": {}
+  }
+}
