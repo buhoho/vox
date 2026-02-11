@@ -52,6 +52,9 @@ struct VoxCLI: ParsableCommand {
     @Option(name: .long, help: "音声認識エンジン（system/whisper）")
     var engine: String?
 
+    @Option(name: .long, help: "Whisper モデル名（base/small/large-v3_turbo 等）")
+    var model: String?
+
     func run() throws {
         // 0. 権限要求（マイク + 音声認識）
         PermissionChecker.requestAll()
@@ -105,7 +108,8 @@ struct VoxCLI: ParsableCommand {
         switch engineName {
         case "whisper":
             let whisperConfig = voxConfig.recognition.whisper ?? .default
-            speechRecognizer = WhisperRecognizer(model: whisperConfig.model, language: whisperConfig.language)
+            let modelName = model ?? whisperConfig.model
+            speechRecognizer = WhisperRecognizer(model: modelName, language: whisperConfig.language)
         default:
             speechRecognizer = SpeechRecognizer()
         }
@@ -121,8 +125,8 @@ struct VoxCLI: ParsableCommand {
 
         // 7. Whisper モデルの非同期ロード
         if let whisperRecognizer = speechRecognizer as? WhisperRecognizer {
-            let modelName = voxConfig.recognition.whisper?.model ?? "base"
-            print("Loading Whisper model (\(modelName))...")
+            let actualModel = model ?? voxConfig.recognition.whisper?.model ?? "base"
+            print("Loading Whisper model (\(actualModel))...")
             whisperRecognizer.prepare { error in
                 if let error = error {
                     print("⚠️  Whisper model load failed: \(error.localizedDescription)")

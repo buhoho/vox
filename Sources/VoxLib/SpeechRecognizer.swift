@@ -3,6 +3,7 @@ import Speech
 
 public protocol SpeechRecognizerProtocol {
     var isStreaming: Bool { get }
+    var supportsPromptContext: Bool { get }
     func setPromptContext(_ texts: [String])
     func startRecognition(
         locale: Locale,
@@ -18,6 +19,7 @@ public protocol SpeechRecognizerProtocol {
 
 // デフォルト実装（ストリーミングモードでは不要なので no-op）
 extension SpeechRecognizerProtocol {
+    public var supportsPromptContext: Bool { false }
     public func setPromptContext(_ texts: [String]) { }
 }
 

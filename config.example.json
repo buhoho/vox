@@ -2,7 +2,7 @@
   "language": "ja-JP",
   "on_device_only": true,
   "rewriter": {
-    "backend": "gemini",
+    "backend": "none",
     "gemini": {
       "api_key_env": "GEMINI_API_KEY",
       "model": "gemini-2.5-flash-lite",
@@ -25,12 +25,12 @@
     "file": null
   },
   "recognition": {
-    "engine": "system",
+    "engine": "whisper",
     "partial_results": true,
     "duration_limit": 60,
     "silence_timeout": 5.0,
     "whisper": {
-      "model": "base",
+      "model": "large-v3_turbo",
       "language": "ja"
     }
   },

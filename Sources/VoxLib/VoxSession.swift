@@ -137,8 +137,10 @@ public final class VoxSession {
             rawText = nil
         }
 
-        // バッチモード（WhisperKit）のみ: 直近のテキストをコンテキストとしてセット
-        if !speechRecognizer.isStreaming {
+        // バッチモード（WhisperKit）かつコンテキスト対応モデルのみ:
+        // 直近のテキストをコンテキストとしてセット
+        // NOTE: large-v3_turbo 等の大型モデルは promptTokens で推論が壊れるため非対応
+        if !speechRecognizer.isStreaming && speechRecognizer.supportsPromptContext {
             speechRecognizer.setPromptContext(
                 transcriptionCache.recentTexts(within: 120)
             )
@@ -151,7 +153,9 @@ public final class VoxSession {
         audioCapture.stop()
 
         state = .processing
-        terminalUI.showRewriting()
+        if !(rewriter is NoopBackend) {
+            terminalUI.showRewriting()
+        }
 
         // マイク停止後、Bluetooth の HFP → A2DP 切り替えを余裕を持って待ってから SE を再生する。
         // 切り替えに約 100-300ms かかるため、500ms 待つ。

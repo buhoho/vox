@@ -5,6 +5,12 @@ import WhisperKit
 public final class WhisperRecognizer: SpeechRecognizerProtocol {
     public var isStreaming: Bool { false }
 
+    // large 系モデルは promptTokens で推論が壊れるため、コンテキストキャッシュ非対応
+    public var supportsPromptContext: Bool {
+        let lower = modelVariant.lowercased()
+        return lower == "base" || lower == "small" || lower == "tiny"
+    }
+
     // WhisperKit インスタンス（prepare で初期化）
     private var whisperKit: WhisperKit?
     private let modelVariant: String
@@ -134,6 +140,9 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                 return
             }
 
+            let duration = Double(samples.count) / 16000.0
+            print("[Whisper] Audio: \(String(format: "%.1f", duration))s (\(samples.count) samples)")
+
             let language = self.whisperLanguage
 
             // Task.detached: アクターコンテキスト継承を回避
@@ -149,8 +158,18 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                     let results = try await whisperKit.transcribe(
                         audioArray: samples, decodeOptions: options
                     )
+
+                    // デバッグ: 各セグメントの詳細を表示
+                    for (i, result) in results.enumerated() {
+                        for seg in result.segments {
+                            print("[Whisper] Seg\(i): noSpeech=\(String(format: "%.3f", seg.noSpeechProb)), avgLogprob=\(String(format: "%.3f", seg.avgLogprob)), text=\"\(seg.text.prefix(50))\"")
+                        }
+                    }
+
                     let text = results.map { $0.text }.joined(separator: " ")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    print("[Whisper] Result: \"\(text.isEmpty ? "(empty)" : String(text.prefix(80)))\"")
 
                     guard !Task.isCancelled else { return }
                     DispatchQueue.main.async { self.onFinalResult?(text, true) }
