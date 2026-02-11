@@ -25,9 +25,14 @@
     "file": null
   },
   "recognition": {
+    "engine": "system",
     "partial_results": true,
     "duration_limit": 60,
-    "silence_timeout": 3.0
+    "silence_timeout": 5.0,
+    "whisper": {
+      "model": "base",
+      "language": "ja"
+    }
   },
   "vocabulary": {
     "custom_terms": {}
