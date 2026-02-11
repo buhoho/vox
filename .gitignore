@@ -21,3 +21,6 @@ DerivedData/
 # 設定ファイル（API キー等を含む可能性）
 config.json
 .env
+
+# デバッグログ
+*.log
