@@ -79,12 +79,30 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
 
     /// WhisperKit モデルの非同期ロード。RunLoop 開始後に呼ぶ。
     /// 状態遷移: notLoaded → loading → ready / failed
+    /// ロード失敗時はキャッシュを削除してリトライする（不完全ダウンロードからの自動復旧）。
     public func prepare(completion: @escaping (Error?) -> Void) {
         modelState = .loading
         Task.detached { [weak self] in
             guard let self = self else { return }
+            let config = WhisperKitConfig(model: self.modelVariant)
+
+            // 1回目: 通常ロード
             do {
-                let config = WhisperKitConfig(model: self.modelVariant)
+                let kit = try await WhisperKit(config)
+                self.whisperKit = kit
+                DispatchQueue.main.async {
+                    self.modelState = .ready
+                    completion(nil)
+                }
+                return
+            } catch {
+                print("[Whisper] Model load failed: \(error.localizedDescription)")
+                print("[Whisper] Cleaning model cache and retrying...")
+            }
+
+            // キャッシュ削除 → 2回目: 再ダウンロード
+            Self.cleanModelCache()
+            do {
                 let kit = try await WhisperKit(config)
                 self.whisperKit = kit
                 DispatchQueue.main.async {
@@ -97,6 +115,17 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                     completion(error)
                 }
             }
+        }
+    }
+
+    /// WhisperKit のモデルキャッシュディレクトリを削除する。
+    /// 不完全なダウンロードや破損したモデルファイルをクリーンアップする。
+    private static func cleanModelCache() {
+        let basePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml")
+        if FileManager.default.fileExists(atPath: basePath.path) {
+            try? FileManager.default.removeItem(at: basePath)
+            print("[Whisper] Cleaned model cache: \(basePath.path)")
         }
     }
 

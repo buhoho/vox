@@ -132,8 +132,10 @@ struct VoxCLI: ParsableCommand {
             whisperRecognizer.prepare { error in
                 if let error = error {
                     print("❌ Whisper model load failed: \(error.localizedDescription)")
-                    print("   Please check your network connection and try again.")
-                    print("   Restart vox to retry.")
+                    print("   Cache was automatically cleaned and retried, but still failed.")
+                    print("   Possible causes: network issue, disk full, or incompatible model.")
+                    print("   Manual cleanup: rm -rf ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/")
+                    print("   Then restart vox to re-download.")
                 } else {
                     print("✅ Whisper model loaded. Ready for voice input.")
                 }
