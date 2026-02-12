@@ -432,4 +432,29 @@ final class VoxSessionTests: XCTestCase {
         XCTAssertTrue(input.contains("あいうえお"), "リセット前のテキストが蓄積されること: \(input)")
         XCTAssertTrue(input.contains("か"), "リセット後のテキストも含まれること: \(input)")
     }
+
+    // MARK: - isReady ブロックテスト
+
+    func testToggleBlockedWhenNotReady() {
+        mockSpeech.isReady = false
+        mockSpeech.statusMessage = "Whisper model loading... Please wait."
+
+        session.toggle()
+
+        // モデル未準備時は listening に遷移しない
+        XCTAssertEqual(session.state, .idle)
+        XCTAssertEqual(mockAudio.startCallCount, 0)
+        XCTAssertEqual(mockSpeech.startCallCount, 0)
+    }
+
+    func testToggleWorksWhenReady() {
+        mockSpeech.isReady = true
+        mockSpeech.statusMessage = nil
+
+        session.toggle()
+
+        XCTAssertEqual(session.state, .listening)
+        XCTAssertEqual(mockAudio.startCallCount, 1)
+        XCTAssertEqual(mockSpeech.startCallCount, 1)
+    }
 }

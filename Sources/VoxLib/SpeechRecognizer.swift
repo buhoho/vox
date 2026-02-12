@@ -3,6 +3,8 @@ import Speech
 
 public protocol SpeechRecognizerProtocol {
     var isStreaming: Bool { get }
+    var isReady: Bool { get }
+    var statusMessage: String? { get }
     var supportsPromptContext: Bool { get }
     func setPromptContext(_ texts: [String])
     func startRecognition(
@@ -17,8 +19,10 @@ public protocol SpeechRecognizerProtocol {
     func feedAudioBuffer(_ buffer: AVAudioPCMBuffer)
 }
 
-// デフォルト実装（ストリーミングモードでは不要なので no-op）
+// デフォルト実装（SFSpeechRecognizer 等、準備不要なエンジン向け）
 extension SpeechRecognizerProtocol {
+    public var isReady: Bool { true }
+    public var statusMessage: String? { nil }
     public var supportsPromptContext: Bool { false }
     public func setPromptContext(_ texts: [String]) { }
 }

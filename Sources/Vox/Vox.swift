@@ -126,13 +126,16 @@ struct VoxCLI: ParsableCommand {
         // 7. Whisper モデルの非同期ロード
         if let whisperRecognizer = speechRecognizer as? WhisperRecognizer {
             let actualModel = model ?? voxConfig.recognition.whisper?.model ?? "base"
-            print("Loading Whisper model (\(actualModel))...")
+            print("⏳ Loading Whisper model (\(actualModel))...")
+            print("   First run may download the model (this can take a few minutes).")
+            print("   Voice input is blocked until loading completes.")
             whisperRecognizer.prepare { error in
                 if let error = error {
-                    print("⚠️  Whisper model load failed: \(error.localizedDescription)")
+                    print("❌ Whisper model load failed: \(error.localizedDescription)")
                     print("   Please check your network connection and try again.")
+                    print("   Restart vox to retry.")
                 } else {
-                    print("Whisper model loaded. Ready.")
+                    print("✅ Whisper model loaded. Ready for voice input.")
                 }
             }
         }

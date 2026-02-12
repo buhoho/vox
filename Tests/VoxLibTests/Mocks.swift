@@ -31,6 +31,8 @@ final class MockAudioCapture: AudioCaptureProtocol {
 
 final class MockSpeechRecognizer: SpeechRecognizerProtocol {
     var isStreaming: Bool = true
+    var isReady: Bool = true
+    var statusMessage: String? = nil
     var supportsPromptContext: Bool = true
     var startCallCount = 0
     var stopCallCount = 0

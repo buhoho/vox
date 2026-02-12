@@ -5,6 +5,35 @@ import WhisperKit
 public final class WhisperRecognizer: SpeechRecognizerProtocol {
     public var isStreaming: Bool { false }
 
+    // MARK: - モデル状態
+
+    public enum ModelState {
+        case notLoaded
+        case loading
+        case ready
+        case failed(Error)
+    }
+
+    public private(set) var modelState: ModelState = .notLoaded
+
+    public var isReady: Bool {
+        if case .ready = modelState { return true }
+        return false
+    }
+
+    public var statusMessage: String? {
+        switch modelState {
+        case .notLoaded:
+            return "Whisper model not loaded."
+        case .loading:
+            return "Whisper model loading... Please wait."
+        case .ready:
+            return nil
+        case .failed(let error):
+            return "Whisper model load failed: \(error.localizedDescription)"
+        }
+    }
+
     // large 系モデルは promptTokens で推論が壊れるため、コンテキストキャッシュ非対応
     public var supportsPromptContext: Bool {
         let lower = modelVariant.lowercased()
@@ -49,16 +78,24 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
     // MARK: - モデル初期化
 
     /// WhisperKit モデルの非同期ロード。RunLoop 開始後に呼ぶ。
+    /// 状態遷移: notLoaded → loading → ready / failed
     public func prepare(completion: @escaping (Error?) -> Void) {
+        modelState = .loading
         Task.detached { [weak self] in
             guard let self = self else { return }
             do {
                 let config = WhisperKitConfig(model: self.modelVariant)
                 let kit = try await WhisperKit(config)
                 self.whisperKit = kit
-                DispatchQueue.main.async { completion(nil) }
+                DispatchQueue.main.async {
+                    self.modelState = .ready
+                    completion(nil)
+                }
             } catch {
-                DispatchQueue.main.async { completion(error) }
+                DispatchQueue.main.async {
+                    self.modelState = .failed(error)
+                    completion(error)
+                }
             }
         }
     }

@@ -78,6 +78,15 @@ public final class VoxSession {
 
     public func startListening() {
         guard state == .idle else { return }
+
+        // 音声認識エンジンの準備状態を確認
+        if !speechRecognizer.isReady {
+            if let message = speechRecognizer.statusMessage {
+                terminalUI.showError(message)
+            }
+            return
+        }
+
         state = .listening
         accumulatedText = ""
         currentSegmentText = ""
