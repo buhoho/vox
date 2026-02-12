@@ -159,16 +159,27 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                         audioArray: samples, decodeOptions: options
                     )
 
-                    // デバッグ: 各セグメントの詳細を表示
+                    // Phase 1: セグメントレベルフィルタ（noSpeechProb が高いセグメントを除去）
+                    var filteredSegments: [String] = []
                     for (i, result) in results.enumerated() {
                         for seg in result.segments {
-                            print("[Whisper] Seg\(i): noSpeech=\(String(format: "%.3f", seg.noSpeechProb)), avgLogprob=\(String(format: "%.3f", seg.avgLogprob)), text=\"\(seg.text.prefix(50))\"")
+                            let discarded = seg.noSpeechProb > 0.6
+                            print("[Whisper] Seg\(i): noSpeech=\(String(format: "%.3f", seg.noSpeechProb)), avgLogprob=\(String(format: "%.3f", seg.avgLogprob)), text=\"\(seg.text.prefix(50))\"\(discarded ? " [DISCARDED]" : "")")
+                            if !discarded {
+                                filteredSegments.append(seg.text)
+                            }
                         }
                     }
 
-                    let text = results.map { $0.text }.joined(separator: " ")
+                    let rawText = filteredSegments.joined(separator: " ")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
 
+                    // Phase 2: テキストレベルフィルタ（既知のハルシネーションフレーズを除去）
+                    let text = Self.filterHallucinations(rawText)
+
+                    if text != rawText {
+                        print("[Whisper] Hallucination filtered: \"\(rawText)\" → \"\(text.isEmpty ? "(empty)" : text)\"")
+                    }
                     print("[Whisper] Result: \"\(text.isEmpty ? "(empty)" : String(text.prefix(80)))\"")
 
                     guard !Task.isCancelled else { return }
@@ -221,6 +232,96 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
 
         // Phase 2: 古い→新しいの時系列順にフラット化
         return tokenGroups.reversed().flatMap { $0 }
+    }
+
+    // MARK: - Hallucination Filter
+
+    /// Whisper が無音・雑音時に生成する既知のハルシネーションフレーズ（原文）。
+    /// YouTube 等の動画字幕データで学習されたため、動画の定型フレーズが出力される。
+    private static let hallucinationPhrasesRaw: [String] = [
+        // 日本語
+        "ご視聴ありがとうございました",
+        "ご視聴ありがとうございます",
+        "見てくれてありがとう",
+        "最後までご覧いただきありがとうございました",
+        "最後までご覧いただきありがとうございます",
+        "ご覧いただきありがとうございました",
+        "ご覧いただきありがとうございます",
+        "チャンネル登録お願いします",
+        "チャンネル登録よろしくお願いします",
+        "チャンネル登録よろしくお願いいたします",
+        "高評価チャンネル登録よろしくお願いします",
+        // 英語（多言語モデル用）
+        "thank you for watching",
+        "thanks for watching",
+        "please subscribe",
+        "don't forget to subscribe",
+        "like and subscribe",
+        "subtitles by the amara.org community",
+        "transcription by castingwords",
+    ]
+
+    /// 正規化済みハルシネーションフレーズ（句読点・空白除去・小文字化済み）
+    /// マッチング時は入力テキストも同じ正規化を通してから比較する。
+    private static let hallucinationPhrases: Set<String> = Set(
+        hallucinationPhrasesRaw.map { normalizeForHallucinationCheck($0) }
+    )
+
+    /// 句読点・記号を除去して正規化する（マッチング用）
+    private static func normalizeForHallucinationCheck(_ text: String) -> String {
+        var result = text.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // 日本語・英語の句読点と記号を除去
+        let punctuation = CharacterSet(charactersIn: "。、！？!?.,…・~〜「」『』（）()｛｝{}【】[]")
+            .union(.whitespacesAndNewlines)
+        result = result.unicodeScalars
+            .filter { !punctuation.contains($0) }
+            .map { String($0) }
+            .joined()
+        return result
+    }
+
+    /// テキストから既知のハルシネーションフレーズを除去する。
+    /// テキスト全体がハルシネーションの場合は空文字を返す。
+    /// テキスト末尾にハルシネーションが付加されている場合は除去する。
+    static func filterHallucinations(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let normalized = normalizeForHallucinationCheck(trimmed)
+
+        // テキスト全体がハルシネーションフレーズに一致 → 空文字
+        if hallucinationPhrases.contains(normalized) {
+            return ""
+        }
+
+        // テキスト末尾にハルシネーションフレーズが付加されているケースを除去
+        var result = trimmed
+        for phrase in hallucinationPhrases {
+            let normalizedResult = normalizeForHallucinationCheck(result)
+            if normalizedResult.hasSuffix(phrase) && normalizedResult != phrase {
+                // 正規化後テキストからフレーズを除去した長さを算出
+                let keepLength = normalizedResult.count - phrase.count
+                // 元テキストの先頭から、正規化対象文字を keepLength 個数えた位置で切る
+                var count = 0
+                var cutIndex = result.startIndex
+                for idx in result.indices {
+                    if count >= keepLength { cutIndex = idx; break }
+                    let scalar = result.unicodeScalars[idx]
+                    let punct = CharacterSet(charactersIn: "。、！？!?.,…・~〜「」『』（）()｛｝{}【】[]")
+                        .union(.whitespacesAndNewlines)
+                    if !punct.contains(scalar) {
+                        count += 1
+                    }
+                }
+                if count >= keepLength {
+                    result = String(result[result.startIndex..<cutIndex])
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+        }
+
+        return result
     }
 
     public func cancelRecognition() {
