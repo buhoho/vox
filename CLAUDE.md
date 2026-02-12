@@ -12,10 +12,16 @@ macOS ローカル音声入力CLIツール。Apple SFSpeechRecognizer（on-devic
 ## ビルド・テスト
 
 ```
-swift build              # デバッグビルド
-swift build -c release   # リリースビルド
-swift test               # テスト実行
+make check               # コミット前チェック（テスト + リリースビルド）。コード変更後は必ず実行
+make test                # テスト実行
+make build               # デバッグビルド
+make release             # リリースビルド
+make install             # リリースバイナリを ~/.local/bin にインストール
 ```
+
+**重要**: コードを変更したら、コミット前に必ず `make check` を実行すること。
+`make check` は `swift test` と `swift build -c release` を両方実行する。
+リリースバイナリを使用しているため、リリースビルドの確認を省略してはならない。
 
 ## ディレクトリ構造
 
@@ -46,5 +52,5 @@ Tests/VoxLibTests/       # テスト（VoxLib をテスト）
 ## チームメイト向けルール
 
 - 自分の担当ファイル以外を勝手に変更しない
-- コミット前に `swift build` が通ることを確認
+- コミット前に `make check` を実行し、テストとリリースビルドの両方が通ることを確認
 - public API を変更する場合はリードに確認

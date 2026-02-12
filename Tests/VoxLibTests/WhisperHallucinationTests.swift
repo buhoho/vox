@@ -3,89 +3,106 @@ import XCTest
 
 final class WhisperHallucinationTests: XCTestCase {
 
-    // MARK: - 完全一致（テキスト全体がハルシネーション）
+    // MARK: - isHallucinationPhrase（確定ハルシネーション）
 
-    func testFullMatchJapanese() {
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("ご視聴ありがとうございました"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("ご視聴ありがとうございます"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("見てくれてありがとう"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("チャンネル登録お願いします"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("チャンネル登録よろしくお願いします"), "")
-    }
-
-    func testFullMatchEnglish() {
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("Thank you for watching"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("Thanks for watching"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("Please subscribe"), "")
-    }
-
-    // MARK: - 句読点バリエーション
-
-    func testFullMatchWithPunctuation() {
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("ご視聴ありがとうございました。"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("ご視聴ありがとうございました！"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("ご視聴ありがとうございました!"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("Thank you for watching."), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("Thank you for watching!"), "")
-    }
-
-    // MARK: - 大文字小文字の正規化
-
-    func testCaseInsensitive() {
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("THANK YOU FOR WATCHING"), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("Thank You For Watching"), "")
-    }
-
-    // MARK: - 正常テキストは変更しない
-
-    func testNormalTextUnchanged() {
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("今日はいい天気ですね"), "今日はいい天気ですね")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("明日の会議について確認します"), "明日の会議について確認します")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("Hello world"), "Hello world")
-    }
-
-    // MARK: - 空文字・ホワイトスペース
-
-    func testEmptyAndWhitespace() {
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations(""), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("   "), "")
-        XCTAssertEqual(WhisperRecognizer.filterHallucinations("\n"), "")
-    }
-
-    // MARK: - 末尾にハルシネーションが付加されているケース
-
-    func testSuffixRemoval() {
-        let result = WhisperRecognizer.filterHallucinations("今日の天気は晴れですご視聴ありがとうございました")
-        XCTAssertEqual(result, "今日の天気は晴れです")
-    }
-
-    func testSuffixRemovalWithPunctuation() {
-        let result = WhisperRecognizer.filterHallucinations("今日の天気は晴れです。ご視聴ありがとうございました。")
-        // 元テキストの句読点「。」は正当なものなので残る
-        XCTAssertEqual(result, "今日の天気は晴れです。")
-    }
-
-    // MARK: - Whisper 実出力パターン（セグメント結合後のテキスト）
-
-    func testSuffixRemovalWithSpace() {
-        // セグメント結合時にスペース区切りで結合されるケース
-        let result = WhisperRecognizer.filterHallucinations("今日の天気は晴れです ご視聴ありがとうございました")
-        XCTAssertEqual(result, "今日の天気は晴れです")
-    }
-
-    func testSuffixRemovalWithSpaceAndPunctuation() {
-        let result = WhisperRecognizer.filterHallucinations("明日の会議について確認します。 ご視聴ありがとうございました。")
-        XCTAssertEqual(result, "明日の会議について確認します。")
-    }
-
-    // MARK: - isHallucinationPhrase（セグメント単位）
-
-    func testIsHallucinationPhrase() {
+    func testHallucinationJapanese() {
         XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございました"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございます"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("見てくれてありがとう"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("チャンネル登録お願いします"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("チャンネル登録よろしくお願いします"))
+    }
+
+    func testHallucinationEnglish() {
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("thank you for watching"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("thanks for watching"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("please subscribe"))
+    }
+
+    func testHallucinationWithPunctuation() {
         XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございました。"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございました！"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございました!"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("thank you for watching."))
+    }
+
+    func testHallucinationCaseInsensitive() {
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("THANK YOU FOR WATCHING"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("Thank You For Watching"))
+    }
+
+    func testHallucinationWithLeadingWhitespace() {
         XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase(" ご視聴ありがとうございました"))
         XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase(" ご視聴ありがとうございました。"))
+    }
+
+    func testHallucinationWithSpecialTokens() {
+        // WhisperKit が特殊トークンをテキストに含める場合でもマッチすること
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase(
+            "<|startoftranscript|><|ja|><|transcribe|><|0.00|>ご視聴ありがとうございました<|3.06|><|endoftext|>"
+        ))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase(
+            "<|0.00|>thank you for watching<|2.50|>"
+        ))
+    }
+
+    // MARK: - stripSpecialTokens
+
+    func testStripSpecialTokens() {
+        XCTAssertEqual(
+            WhisperRecognizer.stripSpecialTokens(
+                "<|startoftranscript|><|ja|><|transcribe|><|0.00|>テスト<|3.06|><|endoftext|>"
+            ),
+            "テスト"
+        )
+        XCTAssertEqual(
+            WhisperRecognizer.stripSpecialTokens("普通のテキスト"),
+            "普通のテキスト"
+        )
+        XCTAssertEqual(
+            WhisperRecognizer.stripSpecialTokens("<|0.00|>セグメント1<|3.00|> <|3.00|>セグメント2<|6.00|>"),
+            "セグメント1 セグメント2"
+        )
+    }
+
+    func testNormalTextNotHallucination() {
         XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase("今日はいい天気ですね"))
+        XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase("明日の会議について確認します"))
+        XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase("Hello world"))
         XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase(""))
+    }
+
+    // MARK: - isSuspiciousPhrase（疑わしいフレーズ）
+
+    func testSuspiciousJapanese() {
+        XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("ありがとうございました"))
+        XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("ありがとうございました。"))
+        XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("お疲れ様でした"))
+    }
+
+    func testSuspiciousEnglish() {
+        XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("thank you"))
+        XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("thanks"))
+        XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("bye"))
+    }
+
+    func testNormalTextNotSuspicious() {
+        XCTAssertFalse(WhisperRecognizer.isSuspiciousPhrase("今日はいい天気ですね"))
+        XCTAssertFalse(WhisperRecognizer.isSuspiciousPhrase("ありがとうございました、また来ます"))
+        XCTAssertFalse(WhisperRecognizer.isSuspiciousPhrase(""))
+    }
+
+    // MARK: - 確定とSuspiciousは排他
+
+    func testHallucinationIsNotSuspicious() {
+        // 「ご視聴ありがとうございました」は確定ハルシネーション、suspiciousではない
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございました"))
+        XCTAssertFalse(WhisperRecognizer.isSuspiciousPhrase("ご視聴ありがとうございました"))
+    }
+
+    func testSuspiciousIsNotHallucination() {
+        // 「ありがとうございました」はsuspicious、確定ハルシネーションではない
+        XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase("ありがとうございました"))
+        XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("ありがとうございました"))
     }
 }

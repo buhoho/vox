@@ -190,60 +190,35 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                     )
                     let options = DecodingOptions(
                         language: language,
+                        skipSpecialTokens: true,
                         promptTokens: promptTokens
                     )
                     let results = try await whisperKit.transcribe(
                         audioArray: samples, decodeOptions: options
                     )
 
-                    // Phase 1: セグメントレベルフィルタ
-                    // まず全セグメントを収集（最後のセグメントを特定するため）
-                    struct SegInfo {
-                        let text: String
-                        let noSpeechProb: Float
-                        let avgLogprob: Float
-                        let index: Int
-                    }
-                    var allSegments: [SegInfo] = []
-                    for (i, result) in results.enumerated() {
-                        for seg in result.segments {
-                            allSegments.append(SegInfo(
-                                text: seg.text,
-                                noSpeechProb: seg.noSpeechProb,
-                                avgLogprob: seg.avgLogprob,
-                                index: i
-                            ))
-                        }
-                    }
-
+                    // セグメントレベルフィルタ
+                    // 全セグメントを平坦化して、最後のセグメントを特定
+                    let allSegments = results.flatMap { $0.segments }
                     var filteredSegments: [String] = []
-                    for (segIdx, seg) in allSegments.enumerated() {
-                        let isLast = segIdx == allSegments.count - 1
+                    for (idx, seg) in allSegments.enumerated() {
+                        let isLast = idx == allSegments.count - 1
                         let noSpeechDiscard = seg.noSpeechProb > 0.6
                         let hallucinationDiscard = Self.isHallucinationPhrase(seg.text)
-                        // 最後のセグメントは疑わしいフレーズ + 低確信度で除去
                         let suspiciousDiscard = isLast && Self.isSuspiciousPhrase(seg.text)
                             && (seg.noSpeechProb > 0.3 || seg.avgLogprob < -0.7)
                         let discarded = noSpeechDiscard || hallucinationDiscard || suspiciousDiscard
                         let reason = noSpeechDiscard ? "noSpeech"
                             : hallucinationDiscard ? "hallucination"
-                            : suspiciousDiscard ? "suspicious(last)"
-                            : ""
-                        print("[Whisper] Seg\(seg.index)\(isLast ? "(last)" : ""): noSpeech=\(String(format: "%.3f", seg.noSpeechProb)), avgLogprob=\(String(format: "%.3f", seg.avgLogprob)), text=\"\(seg.text.prefix(50))\"\(discarded ? " [DISCARDED:\(reason)]" : "")")
+                            : suspiciousDiscard ? "suspicious" : ""
+                        print("[Whisper] Seg\(idx): noSpeech=\(String(format: "%.3f", seg.noSpeechProb)), avgLogprob=\(String(format: "%.3f", seg.avgLogprob)), text=\"\(seg.text.prefix(50))\"\(discarded ? " [DISCARDED:\(reason)]" : "")")
                         if !discarded {
-                            filteredSegments.append(seg.text)
+                            filteredSegments.append(Self.stripSpecialTokens(seg.text))
                         }
                     }
 
-                    let rawText = filteredSegments.joined(separator: " ")
+                    let text = filteredSegments.joined(separator: " ")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                    // Phase 2: テキストレベルフィルタ（結合後テキストの末尾除去）
-                    let text = Self.filterHallucinations(rawText)
-
-                    if text != rawText {
-                        print("[Whisper] Hallucination filtered: \"\(rawText)\" → \"\(text.isEmpty ? "(empty)" : text)\"")
-                    }
                     print("[Whisper] Result: \"\(text.isEmpty ? "(empty)" : String(text.prefix(80)))\"")
 
                     guard !Task.isCancelled else { return }
@@ -298,6 +273,21 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
         return tokenGroups.reversed().flatMap { $0 }
     }
 
+    // MARK: - Special Token Cleanup
+
+    /// WhisperKit が出力テキストに含める特殊トークン（`<|...|>` 形式）を除去する。
+    /// `skipSpecialTokens: true` が正しく動作していれば不要だが、
+    /// 万一漏れた場合にも出力を汚さない安全策。
+    private static let specialTokenPattern = try! NSRegularExpression(
+        pattern: "<\\|[^|]*\\|>", options: []
+    )
+
+    static func stripSpecialTokens(_ text: String) -> String {
+        specialTokenPattern.stringByReplacingMatches(
+            in: text, range: NSRange(text.startIndex..., in: text), withTemplate: ""
+        )
+    }
+
     // MARK: - Hallucination Filter
 
     /// Whisper が無音・雑音時に生成する既知のハルシネーションフレーズ（原文）。
@@ -328,16 +318,17 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
     /// 句読点末尾バリエーション（空文字 = 句読点なし も含む）
     private static let trailingPunctuation = ["", "。", "、", "！", "!", "？", "?", ".", "…"]
 
-    /// ハルシネーションフレーズの全バリエーション（原文 × 句読点末尾）を事前生成
-    /// 検索時にバリエーション生成のコストを避ける
-    private static let hallucinationVariants: [String] = {
-        hallucinationPhrasesRaw.flatMap { phrase in
+    /// フレーズ × 句読点バリエーションを生成
+    private static func makeVariants(_ phrases: [String]) -> [String] {
+        phrases.flatMap { phrase in
             trailingPunctuation.map { punct in phrase + punct }
         }
-    }()
+    }
+
+    private static let hallucinationVariants = makeVariants(hallucinationPhrasesRaw)
 
     /// 疑わしいフレーズ（原文）。
-    /// 実際に使われることもあるが、最後のセグメントで確信度が低い場合はハルシネーションと判定する。
+    /// 実際に使われることもあるが、最後のセグメントで確信度が低い場合のみ除去する。
     private static let suspiciousPhrasesRaw: [String] = [
         "ありがとうございました",
         "ありがとうございます",
@@ -351,52 +342,20 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
         "thanks",
     ]
 
-    /// 疑わしいフレーズの全バリエーション（原文 × 句読点末尾）
-    private static let suspiciousVariants: [String] = {
-        suspiciousPhrasesRaw.flatMap { phrase in
-            trailingPunctuation.map { punct in phrase + punct }
-        }
-    }()
+    private static let suspiciousVariants = makeVariants(suspiciousPhrasesRaw)
 
-    /// セグメントのテキスト全体がハルシネーション確定フレーズに一致するか判定する。
-    /// 前後の空白・句読点を除去してから比較する。大文字小文字も無視。
+    /// セグメントテキストがハルシネーション確定フレーズに一致するか
     static func isHallucinationPhrase(_ text: String) -> Bool {
-        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !cleaned.isEmpty else { return false }
-        return hallucinationVariants.contains { cleaned == $0 }
+        let cleaned = stripSpecialTokens(text)
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return !cleaned.isEmpty && hallucinationVariants.contains { cleaned == $0 }
     }
 
-    /// セグメントのテキスト全体が疑わしいフレーズに一致するか判定する。
-    /// メトリクスとの複合条件で使用する（単独では除去しない）。
+    /// セグメントテキストが疑わしいフレーズに一致するか（メトリクスとの複合条件で使用）
     static func isSuspiciousPhrase(_ text: String) -> Bool {
-        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !cleaned.isEmpty else { return false }
-        return suspiciousVariants.contains { cleaned == $0 }
-    }
-
-    /// テキストから既知のハルシネーションフレーズを除去する。
-    /// - テキスト全体がハルシネーション → 空文字
-    /// - テキスト末尾にハルシネーションが付加 → その部分を除去
-    static func filterHallucinations(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-
-        // 全体一致チェック
-        if isHallucinationPhrase(trimmed) {
-            return ""
-        }
-
-        // 末尾除去: 各フレーズバリエーションで直接 hasSuffix チェック
-        var result = trimmed
-        for variant in hallucinationVariants {
-            if result.hasSuffix(variant) && result.count > variant.count {
-                result = String(result.dropLast(variant.count))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                break
-            }
-        }
-
-        return result
+        let cleaned = stripSpecialTokens(text)
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return !cleaned.isEmpty && suspiciousVariants.contains { cleaned == $0 }
     }
 
     public func cancelRecognition() {
