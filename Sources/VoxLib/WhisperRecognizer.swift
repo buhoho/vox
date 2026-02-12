@@ -235,7 +235,7 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                         let noSpeechDiscard = seg.noSpeechProb > 0.6
                         let hallucinationDiscard = Self.isHallucinationPhrase(seg.text)
                         let suspiciousDiscard = isLast && Self.isSuspiciousPhrase(seg.text)
-                            && (seg.noSpeechProb > 0.3 || seg.avgLogprob < -0.7)
+                            && (seg.noSpeechProb > 0.2 || seg.avgLogprob < -0.5)
                         let discarded = noSpeechDiscard || hallucinationDiscard || suspiciousDiscard
                         let reason = noSpeechDiscard ? "noSpeech"
                             : hallucinationDiscard ? "hallucination"
