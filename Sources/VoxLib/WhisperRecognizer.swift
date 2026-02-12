@@ -196,12 +196,15 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                         audioArray: samples, decodeOptions: options
                     )
 
-                    // Phase 1: セグメントレベルフィルタ（noSpeechProb が高いセグメントを除去）
+                    // Phase 1: セグメントレベルフィルタ
                     var filteredSegments: [String] = []
                     for (i, result) in results.enumerated() {
                         for seg in result.segments {
-                            let discarded = seg.noSpeechProb > 0.6
-                            print("[Whisper] Seg\(i): noSpeech=\(String(format: "%.3f", seg.noSpeechProb)), avgLogprob=\(String(format: "%.3f", seg.avgLogprob)), text=\"\(seg.text.prefix(50))\"\(discarded ? " [DISCARDED]" : "")")
+                            let noSpeechDiscard = seg.noSpeechProb > 0.6
+                            let hallucinationDiscard = Self.isHallucinationPhrase(seg.text)
+                            let discarded = noSpeechDiscard || hallucinationDiscard
+                            let reason = noSpeechDiscard ? "noSpeech" : hallucinationDiscard ? "hallucination" : ""
+                            print("[Whisper] Seg\(i): noSpeech=\(String(format: "%.3f", seg.noSpeechProb)), avgLogprob=\(String(format: "%.3f", seg.avgLogprob)), text=\"\(seg.text.prefix(50))\"\(discarded ? " [DISCARDED:\(reason)]" : "")")
                             if !discarded {
                                 filteredSegments.append(seg.text)
                             }
@@ -211,7 +214,7 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                     let rawText = filteredSegments.joined(separator: " ")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
 
-                    // Phase 2: テキストレベルフィルタ（既知のハルシネーションフレーズを除去）
+                    // Phase 2: テキストレベルフィルタ（結合後テキストの末尾除去）
                     let text = Self.filterHallucinations(rawText)
 
                     if text != rawText {
@@ -298,63 +301,44 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
         "transcription by castingwords",
     ]
 
-    /// 正規化済みハルシネーションフレーズ（句読点・空白除去・小文字化済み）
-    /// マッチング時は入力テキストも同じ正規化を通してから比較する。
-    private static let hallucinationPhrases: Set<String> = Set(
-        hallucinationPhrasesRaw.map { normalizeForHallucinationCheck($0) }
-    )
+    /// 句読点末尾バリエーション（空文字 = 句読点なし も含む）
+    private static let trailingPunctuation = ["", "。", "、", "！", "!", "？", "?", ".", "…"]
 
-    /// 句読点・記号を除去して正規化する（マッチング用）
-    private static func normalizeForHallucinationCheck(_ text: String) -> String {
-        var result = text.lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        // 日本語・英語の句読点と記号を除去
-        let punctuation = CharacterSet(charactersIn: "。、！？!?.,…・~〜「」『』（）()｛｝{}【】[]")
-            .union(.whitespacesAndNewlines)
-        result = result.unicodeScalars
-            .filter { !punctuation.contains($0) }
-            .map { String($0) }
-            .joined()
-        return result
+    /// ハルシネーションフレーズの全バリエーション（原文 × 句読点末尾）を事前生成
+    /// 検索時にバリエーション生成のコストを避ける
+    private static let hallucinationVariants: [String] = {
+        hallucinationPhrasesRaw.flatMap { phrase in
+            trailingPunctuation.map { punct in phrase + punct }
+        }
+    }()
+
+    /// セグメントのテキスト全体がハルシネーションフレーズに一致するか判定する。
+    /// 前後の空白・句読点を除去してから比較する。大文字小文字も無視。
+    static func isHallucinationPhrase(_ text: String) -> Bool {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleaned.isEmpty else { return false }
+        return hallucinationVariants.contains { cleaned == $0 }
     }
 
     /// テキストから既知のハルシネーションフレーズを除去する。
-    /// テキスト全体がハルシネーションの場合は空文字を返す。
-    /// テキスト末尾にハルシネーションが付加されている場合は除去する。
+    /// - テキスト全体がハルシネーション → 空文字
+    /// - テキスト末尾にハルシネーションが付加 → その部分を除去
     static func filterHallucinations(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
-        let normalized = normalizeForHallucinationCheck(trimmed)
-
-        // テキスト全体がハルシネーションフレーズに一致 → 空文字
-        if hallucinationPhrases.contains(normalized) {
+        // 全体一致チェック
+        if isHallucinationPhrase(trimmed) {
             return ""
         }
 
-        // テキスト末尾にハルシネーションフレーズが付加されているケースを除去
+        // 末尾除去: 各フレーズバリエーションで直接 hasSuffix チェック
         var result = trimmed
-        for phrase in hallucinationPhrases {
-            let normalizedResult = normalizeForHallucinationCheck(result)
-            if normalizedResult.hasSuffix(phrase) && normalizedResult != phrase {
-                // 正規化後テキストからフレーズを除去した長さを算出
-                let keepLength = normalizedResult.count - phrase.count
-                // 元テキストの先頭から、正規化対象文字を keepLength 個数えた位置で切る
-                var count = 0
-                var cutIndex = result.startIndex
-                for idx in result.indices {
-                    if count >= keepLength { cutIndex = idx; break }
-                    let scalar = result.unicodeScalars[idx]
-                    let punct = CharacterSet(charactersIn: "。、！？!?.,…・~〜「」『』（）()｛｝{}【】[]")
-                        .union(.whitespacesAndNewlines)
-                    if !punct.contains(scalar) {
-                        count += 1
-                    }
-                }
-                if count >= keepLength {
-                    result = String(result[result.startIndex..<cutIndex])
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }
+        for variant in hallucinationVariants {
+            if result.hasSuffix(variant) && result.count > variant.count {
+                result = String(result.dropLast(variant.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                break
             }
         }
 

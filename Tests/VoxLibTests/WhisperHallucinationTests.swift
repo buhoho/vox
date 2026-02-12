@@ -61,6 +61,31 @@ final class WhisperHallucinationTests: XCTestCase {
 
     func testSuffixRemovalWithPunctuation() {
         let result = WhisperRecognizer.filterHallucinations("今日の天気は晴れです。ご視聴ありがとうございました。")
+        // 元テキストの句読点「。」は正当なものなので残る
+        XCTAssertEqual(result, "今日の天気は晴れです。")
+    }
+
+    // MARK: - Whisper 実出力パターン（セグメント結合後のテキスト）
+
+    func testSuffixRemovalWithSpace() {
+        // セグメント結合時にスペース区切りで結合されるケース
+        let result = WhisperRecognizer.filterHallucinations("今日の天気は晴れです ご視聴ありがとうございました")
         XCTAssertEqual(result, "今日の天気は晴れです")
+    }
+
+    func testSuffixRemovalWithSpaceAndPunctuation() {
+        let result = WhisperRecognizer.filterHallucinations("明日の会議について確認します。 ご視聴ありがとうございました。")
+        XCTAssertEqual(result, "明日の会議について確認します。")
+    }
+
+    // MARK: - isHallucinationPhrase（セグメント単位）
+
+    func testIsHallucinationPhrase() {
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございました"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase("ご視聴ありがとうございました。"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase(" ご視聴ありがとうございました"))
+        XCTAssertTrue(WhisperRecognizer.isHallucinationPhrase(" ご視聴ありがとうございました。"))
+        XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase("今日はいい天気ですね"))
+        XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase(""))
     }
 }
