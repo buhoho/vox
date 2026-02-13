@@ -12,14 +12,26 @@ import AVFoundation
 ///
 /// - 開始: Ping.aiff（高めの短い音）
 /// - 終了: Pop.aiff（ポップ音）
+/// - 処理中: Frog.aiff（カエルの鳴き声、ループ再生）
+/// - 書き込み完了: Funk.aiff（ファンキーな完了音）
 /// - エラー: Basso.aiff（低い音）
 public class SoundPlayer {
     private let startSoundPath = "/System/Library/Sounds/Ping.aiff"
     private let stopSoundPath = "/System/Library/Sounds/Pop.aiff"
+    private let processingSoundPath = "/System/Library/Sounds/Frog.aiff"
+    private let completionSoundPath = "/System/Library/Sounds/Funk.aiff"
     private let errorSoundPath = "/System/Library/Sounds/Basso.aiff"
 
     /// 再生中の AVAudioPlayer への強参照を保持（再生完了前に解放されないように）
     private var activePlayer: AVAudioPlayer?
+
+    /// 処理中ループ用タイマー
+    private var loopTimer: DispatchSourceTimer?
+    private let loopInterval: TimeInterval = 1.5
+
+    /// start/end 以外の SE 音量（start/end は Bluetooth HFP の制約で元々小さめに聞こえるため、
+    /// 他の SE との落差を緩和する）
+    private let effectVolume: Float = 0.7
 
     public init() {}
 
@@ -37,7 +49,31 @@ public class SoundPlayer {
 
     /// エラー SE を再生（非同期、即座に返る）
     public func playError() {
-        playSound(errorSoundPath)
+        playSound(errorSoundPath, volume: effectVolume)
+    }
+
+    /// 処理中ループ SE を開始（Tink.aiff を一定間隔で繰り返し再生）
+    public func startProcessingLoop() {
+        stopProcessingLoop()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + loopInterval, repeating: loopInterval)
+        timer.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            self.playSound(self.processingSoundPath, volume: self.effectVolume)
+        }
+        loopTimer = timer
+        timer.resume()
+    }
+
+    /// 処理中ループ SE を停止（冪等: タイマーがなければ no-op）
+    public func stopProcessingLoop() {
+        loopTimer?.cancel()
+        loopTimer = nil
+    }
+
+    /// 書き込み完了 SE を再生（非同期、即座に返る）
+    public func playCompletion() {
+        playSound(completionSoundPath, volume: effectVolume)
     }
 
     /// 録音開始 SE を再生し、音のアタック部分が鳴り終わるまで待つ。
@@ -59,6 +95,7 @@ public class SoundPlayer {
     public func playErrorAndWait(completion: @escaping () -> Void) {
         do {
             let player = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: errorSoundPath))
+            player.volume = effectVolume
             activePlayer = player
             player.play()
             DispatchQueue.main.asyncAfter(deadline: .now() + player.duration + 0.1) {
@@ -71,9 +108,10 @@ public class SoundPlayer {
 
     // MARK: - Private
 
-    private func playSound(_ path: String) {
+    private func playSound(_ path: String, volume: Float = 1.0) {
         do {
             let player = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
+            player.volume = volume
             activePlayer = player
             player.play()
         } catch {

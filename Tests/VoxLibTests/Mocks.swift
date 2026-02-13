@@ -90,10 +90,26 @@ final class MockSpeechRecognizer: SpeechRecognizerProtocol {
 
 // MARK: - MockSoundPlayer
 
-/// テスト用 SoundPlayer。playStartAndWait のコールバックを同期的に呼ぶ。
+/// テスト用 SoundPlayer。実際の音声再生やタイマーを起動しない。
 final class MockSoundPlayer: SoundPlayer {
+    var startProcessingLoopCallCount = 0
+    var stopProcessingLoopCallCount = 0
+    var playCompletionCallCount = 0
+
     override func playStartAndWait(completion: @escaping () -> Void) {
         completion()
+    }
+
+    override func startProcessingLoop() {
+        startProcessingLoopCallCount += 1
+    }
+
+    override func stopProcessingLoop() {
+        stopProcessingLoopCallCount += 1
+    }
+
+    override func playCompletion() {
+        playCompletionCallCount += 1
     }
 }
 

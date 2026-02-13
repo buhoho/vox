@@ -7,19 +7,21 @@ final class VoxSessionTests: XCTestCase {
     private var mockAudio: MockAudioCapture!
     private var mockSpeech: MockSpeechRecognizer!
     private var mockRewriter: MockRewriterBackend!
+    private var mockSound: MockSoundPlayer!
 
     override func setUp() {
         super.setUp()
         mockAudio = MockAudioCapture()
         mockSpeech = MockSpeechRecognizer()
         mockRewriter = MockRewriterBackend()
+        mockSound = MockSoundPlayer()
 
         session = VoxSession(
             config: .default,
             audioCapture: mockAudio,
             speechRecognizer: mockSpeech,
             rewriter: mockRewriter,
-            soundPlayer: MockSoundPlayer()
+            soundPlayer: mockSound
         )
     }
 
@@ -28,6 +30,7 @@ final class VoxSessionTests: XCTestCase {
         mockAudio = nil
         mockSpeech = nil
         mockRewriter = nil
+        mockSound = nil
         super.tearDown()
     }
 
@@ -456,5 +459,88 @@ final class VoxSessionTests: XCTestCase {
         XCTAssertEqual(session.state, .listening)
         XCTAssertEqual(mockAudio.startCallCount, 1)
         XCTAssertEqual(mockSpeech.startCallCount, 1)
+    }
+
+    // MARK: - Processing Feedback Sound (Batch Mode)
+
+    func testBatchModeStartsProcessingLoop() {
+        mockSpeech.isStreaming = false
+        session.toggle()  // idle -> listening
+        session.toggle()  // listening -> processing
+        // simulateFinalResult を呼ばない（processing 状態を維持）
+
+        let exp = expectation(description: "processing loop start")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { exp.fulfill() }
+        wait(for: [exp], timeout: 1.0)
+
+        XCTAssertEqual(mockSound.startProcessingLoopCallCount, 1)
+    }
+
+    func testStreamingModeDoesNotStartProcessingLoop() {
+        mockSpeech.isStreaming = true
+        session.toggle()  // idle -> listening
+        mockSpeech.simulatePartialResult("テスト")
+        mockRewriter.result = .success("修正")
+        session.toggle()  // listening -> processing
+
+        let exp = expectation(description: "no loop")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { exp.fulfill() }
+        wait(for: [exp], timeout: 1.0)
+
+        XCTAssertEqual(mockSound.startProcessingLoopCallCount, 0)
+    }
+
+    func testBatchModeStopsLoopAndPlaysCompletionOnSuccess() {
+        mockSpeech.isStreaming = false
+        session.toggle()  // idle -> listening
+        session.toggle()  // listening -> processing
+
+        mockRewriter.result = .success("修正テキスト")
+        mockSpeech.simulateFinalResult("認識結果", isUserInitiated: true)
+
+        let exp = expectation(description: "completion")
+        DispatchQueue.main.async { exp.fulfill() }
+        wait(for: [exp], timeout: 1.0)
+
+        XCTAssertEqual(mockSound.stopProcessingLoopCallCount, 1)
+        XCTAssertEqual(mockSound.playCompletionCallCount, 1)
+    }
+
+    func testBatchModeStopsLoopOnEmptyResult() {
+        mockSpeech.isStreaming = false
+        session.toggle()  // idle -> listening
+        session.toggle()  // listening -> processing
+
+        mockSpeech.simulateFinalResult("", isUserInitiated: true)
+
+        XCTAssertEqual(mockSound.stopProcessingLoopCallCount, 1)
+        XCTAssertEqual(mockSound.playCompletionCallCount, 0)
+    }
+
+    func testBatchModeStopsLoopOnError() {
+        mockSpeech.isStreaming = false
+        session.toggle()  // idle -> listening
+        session.toggle()  // listening -> processing
+
+        mockSpeech.simulateError(VoxError.speechRecognizerUnavailable)
+
+        XCTAssertEqual(mockSound.stopProcessingLoopCallCount, 1)
+    }
+
+    func testBatchModeRewriteFailureStillPlaysCompletion() {
+        mockSpeech.isStreaming = false
+        session.toggle()  // idle -> listening
+        session.toggle()  // listening -> processing
+
+        mockRewriter.result = .failure(VoxError.rewriteFailed(
+            NSError(domain: "test", code: -1, userInfo: nil)))
+        mockSpeech.simulateFinalResult("生テキスト", isUserInitiated: true)
+
+        let exp = expectation(description: "rewrite failure completion")
+        DispatchQueue.main.async { exp.fulfill() }
+        wait(for: [exp], timeout: 1.0)
+
+        XCTAssertEqual(mockSound.stopProcessingLoopCallCount, 1)
+        XCTAssertEqual(mockSound.playCompletionCallCount, 1)
     }
 }

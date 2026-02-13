@@ -170,7 +170,13 @@ public final class VoxSession {
         // 切り替えに約 100-300ms かかるため、500ms 待つ。
         // 終了 SE はマイクと無関係なので、余裕を持って鳴らして問題ない。
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.soundPlayer.playStop()
+            guard let self = self else { return }
+            // 新しいセッションが listening を開始している場合はスキップ
+            guard self.state != .listening else { return }
+            self.soundPlayer.playStop()
+            if self.state == .processing && !self.speechRecognizer.isStreaming {
+                self.soundPlayer.startProcessingLoop()
+            }
         }
 
         if let rawText = rawText {
@@ -185,6 +191,7 @@ public final class VoxSession {
     private func processRawText(_ rawText: String) {
         // 空認識結果チェック
         if rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            soundPlayer.stopProcessingLoop()
             terminalUI.showNoSpeech()
             state = .idle
             terminalUI.showReady()
@@ -202,6 +209,11 @@ public final class VoxSession {
                 case .failure:
                     finalText = rawText
                     self.terminalUI.showError("Rewrite failed, using raw text.")
+                }
+
+                self.soundPlayer.stopProcessingLoop()
+                if !self.speechRecognizer.isStreaming {
+                    self.soundPlayer.playCompletion()
                 }
 
                 self.terminalUI.showFinalResult(finalText)
@@ -263,6 +275,7 @@ public final class VoxSession {
                 guard let self = self else { return }
                 guard self.state == .listening || self.state == .processing else { return }
                 self.silenceDetector.stop()
+                self.soundPlayer.stopProcessingLoop()
                 let nsError = error as NSError
                 self.terminalUI.showError("\(error.localizedDescription) [domain=\(nsError.domain) code=\(nsError.code)]")
                 self.audioCapture.stop()
