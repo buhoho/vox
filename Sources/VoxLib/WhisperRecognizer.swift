@@ -246,7 +246,7 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                         }
                     }
 
-                    let text = filteredSegments.joined(separator: " ")
+                    let text = filteredSegments.joined()
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     print("[Whisper] Result: \"\(text.isEmpty ? "(empty)" : String(text.prefix(80)))\"")
 
