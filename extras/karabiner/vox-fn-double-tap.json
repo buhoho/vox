@@ -171,6 +171,13 @@
                     "from": { "key_code": "f12", "modifiers": { "optional": ["any"] } },
                     "to": [{ "consumer_key_code": "volume_increment" }],
                     "conditions": [{ "type": "variable_if", "name": "vox_fn_held", "value": 1 }]
+                },
+                {
+                    "description": "fn+Delete → Forward Delete",
+                    "type": "basic",
+                    "from": { "key_code": "delete_or_backspace", "modifiers": { "optional": ["any"] } },
+                    "to": [{ "key_code": "delete_forward" }],
+                    "conditions": [{ "type": "variable_if", "name": "vox_fn_held", "value": 1 }]
                 }
             ]
         }
