@@ -235,7 +235,7 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                         let noSpeechDiscard = seg.noSpeechProb > 0.6
                         let hallucinationDiscard = Self.isHallucinationPhrase(seg.text)
                         let suspiciousDiscard = isLast && Self.isSuspiciousPhrase(seg.text)
-                            && (seg.noSpeechProb > 0.2 || seg.avgLogprob < -0.5)
+                            && (seg.noSpeechProb > 0.1 || seg.avgLogprob < -0.3)
                         let discarded = noSpeechDiscard || hallucinationDiscard || suspiciousDiscard
                         let reason = noSpeechDiscard ? "noSpeech"
                             : hallucinationDiscard ? "hallucination"
@@ -246,8 +246,10 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
                         }
                     }
 
-                    let text = filteredSegments.joined()
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let text = Self.trimTrailingSuspicious(
+                        filteredSegments.joined()
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
                     print("[Whisper] Result: \"\(text.isEmpty ? "(empty)" : String(text.prefix(80)))\"")
 
                     guard !Task.isCancelled else { return }
@@ -385,6 +387,24 @@ public final class WhisperRecognizer: SpeechRecognizerProtocol {
         let cleaned = stripSpecialTokens(text)
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return !cleaned.isEmpty && suspiciousVariants.contains { cleaned == $0 }
+    }
+
+    /// 結合後テキストの末尾に付いた疑わしいフレーズを除去する。
+    /// セグメント境界をまたいで定型句が付加されるケースに対応。
+    /// テキスト全体が疑わしいフレーズのみの場合は除去しない（セグメントフィルタの責務）。
+    static func trimTrailingSuspicious(_ text: String) -> String {
+        let lowered = text.lowercased()
+        // 長いフレーズから優先マッチ
+        for phrase in suspiciousPhrasesRaw.sorted(by: { $0.count > $1.count }) {
+            for punct in trailingPunctuation {
+                let suffix = phrase + punct
+                if lowered.hasSuffix(suffix) && text.count > suffix.count {
+                    return String(text.dropLast(suffix.count))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+        }
+        return text
     }
 
     public func cancelRecognition() {

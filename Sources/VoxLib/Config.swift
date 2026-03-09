@@ -26,12 +26,11 @@ public struct VoxConfig: Codable {
         self.vocabulary = vocabulary
     }
 
-    public static func load(from path: String?) throws -> VoxConfig {
-        guard let path = path else {
-            return VoxConfig.default
-        }
+    public static let defaultConfigPath = "~/.config/vox/config.json"
 
-        let expandedPath = NSString(string: path).expandingTildeInPath
+    public static func load(from path: String?) throws -> VoxConfig {
+        let configPath = path ?? defaultConfigPath
+        let expandedPath = NSString(string: configPath).expandingTildeInPath
         let url = URL(fileURLWithPath: expandedPath)
 
         guard FileManager.default.fileExists(atPath: expandedPath) else {
@@ -163,8 +162,21 @@ public struct WhisperConfig: Codable {
 
 public struct VocabularyConfig: Codable {
     public let customTerms: [String: String]
+    public let symbolDictionary: [String: String]
+
+    public init(customTerms: [String: String] = [:], symbolDictionary: [String: String] = [:]) {
+        self.customTerms = customTerms
+        self.symbolDictionary = symbolDictionary
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        customTerms = try container.decodeIfPresent([String: String].self, forKey: .customTerms) ?? [:]
+        symbolDictionary = try container.decodeIfPresent([String: String].self, forKey: .symbolDictionary) ?? [:]
+    }
 
     public static let `default` = VocabularyConfig(
-        customTerms: [:]
+        customTerms: [:],
+        symbolDictionary: [:]
     )
 }

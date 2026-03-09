@@ -189,8 +189,14 @@ public final class VoxSession {
 
     /// リライト処理の共通メソッド（ストリーミング: stopListening から直接、バッチ: onFinalResult 経由）
     private func processRawText(_ rawText: String) {
+        // シンボル辞書置換（リライト前に適用）
+        let text = SymbolReplacer.apply(
+            dictionary: config.vocabulary.symbolDictionary,
+            to: rawText
+        )
+
         // 空認識結果チェック
-        if rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             soundPlayer.stopProcessingLoop()
             terminalUI.showNoSpeech()
             state = .idle
@@ -199,7 +205,7 @@ public final class VoxSession {
         }
 
         // リライトを非同期で発火（SE の再生とは独立して並行実行）
-        rewriter.rewrite(rawText) { [weak self] result in
+        rewriter.rewrite(text) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 let finalText: String
@@ -207,7 +213,7 @@ public final class VoxSession {
                 case .success(let rewritten):
                     finalText = rewritten
                 case .failure:
-                    finalText = rawText
+                    finalText = text
                     self.terminalUI.showError("Rewrite failed, using raw text.")
                 }
 

@@ -35,6 +35,13 @@
     }
   },
   "vocabulary": {
-    "custom_terms": {}
+    "custom_terms": {},
+    "symbol_dictionary": {
+      "記号ハート": "❤️",
+      "記号笑い": "😂",
+      "記号汗": "😅",
+      "記号改行": "\n",
+      "記号開業": "\n"
+    }
   }
 }

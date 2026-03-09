@@ -282,6 +282,71 @@ final class VoxSessionTests: XCTestCase {
         XCTAssertEqual(mockRewriter.rewriteCallCount, 1)
     }
 
+    // MARK: - Symbol Dictionary Replacement
+
+    func testSymbolDictionaryAppliedBeforeRewrite() {
+        let configWithSymbols = VoxConfig(
+            language: "ja-JP",
+            onDeviceOnly: true,
+            rewriter: .default,
+            output: .default,
+            recognition: .default,
+            vocabulary: VocabularyConfig(symbolDictionary: ["記号ハート": "❤️"])
+        )
+        let sessionWithSymbols = VoxSession(
+            config: configWithSymbols,
+            audioCapture: mockAudio,
+            speechRecognizer: mockSpeech,
+            rewriter: mockRewriter,
+            soundPlayer: mockSound
+        )
+
+        sessionWithSymbols.toggle()  // idle -> listening
+        mockSpeech.simulatePartialResult("ありがとう記号ハート")
+        mockRewriter.result = .success("ありがとう❤️")
+        sessionWithSymbols.toggle()  // listening -> processing
+
+        // リライターに渡されるテキストはシンボル置換済み
+        XCTAssertEqual(mockRewriter.lastInput, "ありがとう❤️")
+    }
+
+    func testSymbolDictionaryRewriteFailureFallbackUsesReplacedText() {
+        let configWithSymbols = VoxConfig(
+            language: "ja-JP",
+            onDeviceOnly: true,
+            rewriter: .default,
+            output: .default,
+            recognition: .default,
+            vocabulary: VocabularyConfig(symbolDictionary: ["記号ハート": "❤️"])
+        )
+        let sessionWithSymbols = VoxSession(
+            config: configWithSymbols,
+            audioCapture: mockAudio,
+            speechRecognizer: mockSpeech,
+            rewriter: mockRewriter,
+            soundPlayer: mockSound
+        )
+
+        sessionWithSymbols.toggle()  // idle -> listening
+        mockSpeech.simulatePartialResult("記号ハート")
+        mockRewriter.result = .failure(VoxError.rewriteFailed(
+            NSError(domain: "test", code: -1, userInfo: nil)))
+        sessionWithSymbols.toggle()  // listening -> processing
+
+        // リライト失敗時のフォールバックもシンボル置換済み
+        XCTAssertEqual(mockRewriter.lastInput, "❤️")
+    }
+
+    func testEmptyDictionaryDoesNotAffectText() {
+        // デフォルト設定（空辞書）で既存の動作が変わらないこと
+        session.toggle()  // idle -> listening
+        mockSpeech.simulatePartialResult("記号ハート")
+        mockRewriter.result = .success("記号ハート")
+        session.toggle()  // listening -> processing
+
+        XCTAssertEqual(mockRewriter.lastInput, "記号ハート")
+    }
+
     // MARK: - Segment Reset Detection
 
     // MARK: - Context Cache (Batch Mode)

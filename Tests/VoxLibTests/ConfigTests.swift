@@ -17,6 +17,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.recognition.partialResults, true)
         XCTAssertEqual(config.recognition.durationLimit, 60)
         XCTAssertTrue(config.vocabulary.customTerms.isEmpty)
+        XCTAssertTrue(config.vocabulary.symbolDictionary.isEmpty)
     }
 
     // MARK: - JSON Parsing
@@ -72,13 +73,16 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.recognition.durationLimit, 30)
         XCTAssertEqual(config.vocabulary.customTerms["swift"], "Swift")
         XCTAssertEqual(config.vocabulary.customTerms["xcode"], "Xcode")
+        XCTAssertTrue(config.vocabulary.symbolDictionary.isEmpty)
     }
 
     // MARK: - Missing File Returns Default
 
-    func testLoadFromNilReturnsDefault() throws {
+    func testLoadFromNilUsesDefaultPath() throws {
+        // --config 未指定時は ~/.config/vox/config.json を自動で読む
+        // テスト環境ではファイルの有無でどちらかになる
         let config = try VoxConfig.load(from: nil)
-        XCTAssertEqual(config.language, "ja-JP")
+        XCTAssertFalse(config.language.isEmpty)
     }
 
     func testLoadFromNonexistentFileReturnsDefault() throws {
@@ -178,6 +182,78 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.recognition.engine, "whisper")
         XCTAssertEqual(config.recognition.whisper?.model, "small")
         XCTAssertEqual(config.recognition.whisper?.language, "en")
+    }
+
+    // MARK: - Symbol Dictionary
+
+    func testSymbolDictionaryParsing() throws {
+        let json = """
+        {
+            "language": "ja-JP",
+            "on_device_only": true,
+            "rewriter": {
+                "backend": "gemini",
+                "gemini": { "api_key_env": "GEMINI_API_KEY", "model": "gemini-2.5-flash-lite", "endpoint": "https://generativelanguage.googleapis.com/v1beta" },
+                "claude": null,
+                "ollama": null,
+                "system_prompt_path": null,
+                "max_tokens": 2048
+            },
+            "output": { "clipboard": true, "stdout": false, "file": null },
+            "recognition": {
+                "partial_results": true,
+                "duration_limit": 60,
+                "silence_timeout": 60
+            },
+            "vocabulary": {
+                "custom_terms": {},
+                "symbol_dictionary": {
+                    "記号ハート": "❤️",
+                    "記号改行": "\\n"
+                }
+            }
+        }
+        """
+
+        let tempFile = NSTemporaryDirectory() + "vox_test_symbol.json"
+        try json.write(toFile: tempFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tempFile) }
+
+        let config = try VoxConfig.load(from: tempFile)
+        XCTAssertEqual(config.vocabulary.symbolDictionary["記号ハート"], "❤️")
+        XCTAssertEqual(config.vocabulary.symbolDictionary["記号改行"], "\n")
+    }
+
+    func testVocabularyBackwardCompatibilityWithoutSymbolDictionary() throws {
+        // symbol_dictionary キーがない JSON でもデコードできること
+        let json = """
+        {
+            "language": "ja-JP",
+            "on_device_only": true,
+            "rewriter": {
+                "backend": "gemini",
+                "gemini": { "api_key_env": "GEMINI_API_KEY", "model": "gemini-2.5-flash-lite", "endpoint": "https://generativelanguage.googleapis.com/v1beta" },
+                "claude": null,
+                "ollama": null,
+                "system_prompt_path": null,
+                "max_tokens": 2048
+            },
+            "output": { "clipboard": true, "stdout": false, "file": null },
+            "recognition": {
+                "partial_results": true,
+                "duration_limit": 60,
+                "silence_timeout": 60
+            },
+            "vocabulary": { "custom_terms": {} }
+        }
+        """
+
+        let tempFile = NSTemporaryDirectory() + "vox_test_compat_symbol.json"
+        try json.write(toFile: tempFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tempFile) }
+
+        let config = try VoxConfig.load(from: tempFile)
+        XCTAssertTrue(config.vocabulary.symbolDictionary.isEmpty)
     }
 
     // MARK: - OutputConfig Init

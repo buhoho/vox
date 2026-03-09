@@ -105,4 +105,42 @@ final class WhisperHallucinationTests: XCTestCase {
         XCTAssertFalse(WhisperRecognizer.isHallucinationPhrase("ありがとうございました"))
         XCTAssertTrue(WhisperRecognizer.isSuspiciousPhrase("ありがとうございました"))
     }
+
+    // MARK: - trimTrailingSuspicious（末尾定型句トリミング）
+
+    func testTrimTrailingSuspiciousRemovesSuffix() {
+        XCTAssertEqual(
+            WhisperRecognizer.trimTrailingSuspicious("今日はいい天気ですねありがとうございました"),
+            "今日はいい天気ですね"
+        )
+    }
+
+    func testTrimTrailingSuspiciousWithPunctuation() {
+        XCTAssertEqual(
+            WhisperRecognizer.trimTrailingSuspicious("明日もよろしくお願いしますありがとうございました。"),
+            "明日もよろしくお願いします"
+        )
+    }
+
+    func testTrimTrailingSuspiciousKeepsSoloPhrase() {
+        // テキスト全体が疑わしいフレーズのみの場合は除去しない
+        XCTAssertEqual(
+            WhisperRecognizer.trimTrailingSuspicious("ありがとうございました"),
+            "ありがとうございました"
+        )
+    }
+
+    func testTrimTrailingSuspiciousNoMatch() {
+        XCTAssertEqual(
+            WhisperRecognizer.trimTrailingSuspicious("今日はいい天気ですね"),
+            "今日はいい天気ですね"
+        )
+    }
+
+    func testTrimTrailingSuspiciousEnglish() {
+        XCTAssertEqual(
+            WhisperRecognizer.trimTrailingSuspicious("Hello world thank you"),
+            "Hello world"
+        )
+    }
 }
