@@ -16,7 +16,7 @@ test:
 # コード変更後は必ずこれを実行すること
 check: test release
 
-# リリースバイナリを ~/.local/bin にインストール
+# リリースバイナリを ~/bin にインストール
 install: release
-	mkdir -p ~/.local/bin
-	cp .build/release/vox ~/.local/bin/vox
+	mkdir -p ~/bin
+	cp .build/release/vox ~/bin/vox
