@@ -608,4 +608,179 @@ final class VoxSessionTests: XCTestCase {
         XCTAssertEqual(mockSound.stopProcessingLoopCallCount, 1)
         XCTAssertEqual(mockSound.playCompletionCallCount, 1)
     }
+
+    // MARK: - Duration Limit
+
+    func testDurationLimitCancelsListening() {
+        let config = VoxConfig(
+            language: "ja-JP",
+            onDeviceOnly: true,
+            rewriter: .default,
+            output: .default,
+            recognition: RecognitionConfig(
+                engine: nil,
+                partialResults: true,
+                durationLimit: 1,
+                silenceTimeout: 0,
+                whisper: nil
+            ),
+            vocabulary: .default
+        )
+        let shortSession = VoxSession(
+            config: config,
+            audioCapture: mockAudio,
+            speechRecognizer: mockSpeech,
+            rewriter: mockRewriter,
+            soundPlayer: mockSound
+        )
+
+        shortSession.toggle()  // idle -> listening
+        XCTAssertEqual(shortSession.state, .listening)
+
+        let exp = expectation(description: "duration limit fires")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { exp.fulfill() }
+        wait(for: [exp], timeout: 2.0)
+
+        XCTAssertEqual(shortSession.state, .idle)
+        XCTAssertEqual(mockSpeech.cancelCallCount, 1)
+        XCTAssertEqual(mockRewriter.rewriteCallCount, 0)
+    }
+
+    func testDurationLimitPlaysErrorAfterCancel() {
+        let config = VoxConfig(
+            language: "ja-JP",
+            onDeviceOnly: true,
+            rewriter: .default,
+            output: .default,
+            recognition: RecognitionConfig(
+                engine: nil,
+                partialResults: true,
+                durationLimit: 1,
+                silenceTimeout: 0,
+                whisper: nil
+            ),
+            vocabulary: .default
+        )
+        let shortSession = VoxSession(
+            config: config,
+            audioCapture: mockAudio,
+            speechRecognizer: mockSpeech,
+            rewriter: mockRewriter,
+            soundPlayer: mockSound
+        )
+
+        shortSession.toggle()  // idle -> listening
+
+        // Timer(1s) + asyncAfter(0.5s) + マージン
+        let exp = expectation(description: "error sound after cancel")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { exp.fulfill() }
+        wait(for: [exp], timeout: 2.5)
+
+        XCTAssertEqual(mockSound.playErrorCallCount, 1)
+    }
+
+    func testDurationLimitDisabledWhenZero() {
+        let config = VoxConfig(
+            language: "ja-JP",
+            onDeviceOnly: true,
+            rewriter: .default,
+            output: .default,
+            recognition: RecognitionConfig(
+                engine: nil,
+                partialResults: true,
+                durationLimit: 0,
+                silenceTimeout: 0,
+                whisper: nil
+            ),
+            vocabulary: .default
+        )
+        let noLimitSession = VoxSession(
+            config: config,
+            audioCapture: mockAudio,
+            speechRecognizer: mockSpeech,
+            rewriter: mockRewriter,
+            soundPlayer: mockSound
+        )
+
+        noLimitSession.toggle()  // idle -> listening
+        XCTAssertEqual(noLimitSession.state, .listening)
+
+        let exp = expectation(description: "still listening")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exp.fulfill() }
+        wait(for: [exp], timeout: 1.0)
+
+        XCTAssertEqual(noLimitSession.state, .listening)
+    }
+
+    func testDurationLimitCancelledByUserStop() {
+        let config = VoxConfig(
+            language: "ja-JP",
+            onDeviceOnly: true,
+            rewriter: .default,
+            output: .default,
+            recognition: RecognitionConfig(
+                engine: nil,
+                partialResults: true,
+                durationLimit: 2,
+                silenceTimeout: 0,
+                whisper: nil
+            ),
+            vocabulary: .default
+        )
+        let session2 = VoxSession(
+            config: config,
+            audioCapture: mockAudio,
+            speechRecognizer: mockSpeech,
+            rewriter: mockRewriter,
+            soundPlayer: mockSound
+        )
+
+        session2.toggle()  // idle -> listening
+        mockSpeech.simulatePartialResult("テスト")
+        mockRewriter.result = .success("修正版")
+        session2.toggle()  // listening -> processing（ユーザーが先に停止）
+
+        // タイマーが発火しても state != .listening なので何も起きない
+        let exp = expectation(description: "timer harmless after stop")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) { exp.fulfill() }
+        wait(for: [exp], timeout: 3.0)
+
+        XCTAssertEqual(mockSound.playErrorCallCount, 0)
+    }
+
+    func testDurationLimitWorksInBatchMode() {
+        mockSpeech.isStreaming = false
+        let config = VoxConfig(
+            language: "ja-JP",
+            onDeviceOnly: true,
+            rewriter: .default,
+            output: .default,
+            recognition: RecognitionConfig(
+                engine: "whisper",
+                partialResults: true,
+                durationLimit: 1,
+                silenceTimeout: 0,
+                whisper: .default
+            ),
+            vocabulary: .default
+        )
+        let batchSession = VoxSession(
+            config: config,
+            audioCapture: mockAudio,
+            speechRecognizer: mockSpeech,
+            rewriter: mockRewriter,
+            soundPlayer: mockSound
+        )
+
+        batchSession.toggle()  // idle -> listening
+        XCTAssertEqual(batchSession.state, .listening)
+
+        let exp = expectation(description: "batch mode duration limit")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { exp.fulfill() }
+        wait(for: [exp], timeout: 2.0)
+
+        XCTAssertEqual(batchSession.state, .idle)
+        XCTAssertEqual(mockSpeech.cancelCallCount, 1)
+        XCTAssertEqual(mockSound.playErrorCallCount, 0)  // 0.5s 待ちの途中
+    }
 }

@@ -15,7 +15,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertNil(config.output.file)
         XCTAssertEqual(config.recognition.silenceTimeout, 60)  // 60秒で自動キャンセル
         XCTAssertEqual(config.recognition.partialResults, true)
-        XCTAssertEqual(config.recognition.durationLimit, 60)
+        XCTAssertEqual(config.recognition.durationLimit, 300)
         XCTAssertTrue(config.vocabulary.customTerms.isEmpty)
         XCTAssertTrue(config.vocabulary.symbolDictionary.isEmpty)
     }

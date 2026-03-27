@@ -142,7 +142,7 @@ public struct RecognitionConfig: Codable {
     public static let `default` = RecognitionConfig(
         engine: nil,
         partialResults: true,
-        durationLimit: 60,
+        durationLimit: 300,
         silenceTimeout: 60,  // 60秒間無音で自動キャンセル（破棄）
         whisper: nil
     )

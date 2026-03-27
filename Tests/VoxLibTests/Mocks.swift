@@ -95,6 +95,7 @@ final class MockSoundPlayer: SoundPlayer {
     var startProcessingLoopCallCount = 0
     var stopProcessingLoopCallCount = 0
     var playCompletionCallCount = 0
+    var playErrorCallCount = 0
 
     override func playStartAndWait(completion: @escaping () -> Void) {
         completion()
@@ -110,6 +111,10 @@ final class MockSoundPlayer: SoundPlayer {
 
     override func playCompletion() {
         playCompletionCallCount += 1
+    }
+
+    override func playError() {
+        playErrorCallCount += 1
     }
 }
 

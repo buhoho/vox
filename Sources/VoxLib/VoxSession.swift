@@ -16,6 +16,7 @@ public final class VoxSession {
     // class の直接利用
     private let silenceDetector: SilenceDetector
     private let soundPlayer: SoundPlayer
+    private var durationTimer: Timer?
     private let outputManager: OutputManager
     private let terminalUI: TerminalUI
 
@@ -66,6 +67,8 @@ public final class VoxSession {
 
     public func cancelListening() {
         guard state == .listening else { return }
+        durationTimer?.invalidate()
+        durationTimer = nil
         silenceDetector.stop()
         speechRecognizer.cancelRecognition()
         audioCapture.stop()
@@ -123,6 +126,31 @@ public final class VoxSession {
                 }
             }
 
+            // 録音時間制限（ストリーミング・バッチ両対応、durationLimit > 0 の場合のみ有効）
+            // 停止したつもりのユーザーが別の作業にフォーカスしている状態で
+            // 録音が走り続ける事故を防止する。cancelListening で破棄し、
+            // リライト→クリップボード→auto-paste の連鎖を起こさない。
+            let durationLimit = self.config.recognition.durationLimit
+            if durationLimit > 0 {
+                self.durationTimer = Timer.scheduledTimer(
+                    withTimeInterval: TimeInterval(durationLimit),
+                    repeats: false
+                ) { [weak self] _ in
+                    guard let self = self, self.state == .listening else { return }
+                    self.terminalUI.showError(
+                        "Recording limit reached (\(durationLimit)s), cancelled."
+                    )
+                    self.cancelListening()
+                    // マイク停止後、HFP → A2DP 復帰を待ってから警告音を鳴らす
+                    // stopListening() の終了 SE と同じパターン
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        guard let self = self else { return }
+                        self.soundPlayer.playError()
+                        self.terminalUI.showReady()
+                    }
+                }
+            }
+
             // SpeechRecognizer 開始
             self.beginRecognition()
         }
@@ -133,6 +161,8 @@ public final class VoxSession {
     public func stopListening() {
         guard state == .listening else { return }
 
+        durationTimer?.invalidate()
+        durationTimer = nil
         silenceDetector.stop()
 
         // ストリーミング: 部分結果が蓄積済み → 即座にリライトへ
@@ -280,6 +310,8 @@ public final class VoxSession {
             onError: { [weak self] error in
                 guard let self = self else { return }
                 guard self.state == .listening || self.state == .processing else { return }
+                self.durationTimer?.invalidate()
+                self.durationTimer = nil
                 self.silenceDetector.stop()
                 self.soundPlayer.stopProcessingLoop()
                 let nsError = error as NSError
